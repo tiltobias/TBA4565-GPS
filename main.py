@@ -77,8 +77,8 @@ for sat in satellites:
     coords = satellite_coordinates(sat, T, correction=True)
     sat["coords"] = coords
 
-print("\nCoordinates (ECEF) at transmission time:")
-[print(sat["coords"]) for sat in satellites]
+# print("\nCoordinates (ECEF) at transmission time:")
+# [print(sat["coords"]) for sat in satellites]
 
 
 """
@@ -89,16 +89,16 @@ for sat in satellites:
     coords_uncorrected = satellite_coordinates(sat, T, correction=False)
     sat["coords_uncorrected"] = coords_uncorrected
 
-print("\nUncorrected coordinates (ECEF) at transmission time:")
-[print(sat["coords_uncorrected"]) for sat in satellites]
+# print("\nUncorrected coordinates (ECEF) at transmission time:")
+# [print(sat["coords_uncorrected"]) for sat in satellites]
 
 for sat in satellites:
     diff = sat["coords"] - sat["coords_uncorrected"]
     sat["diff"] = diff
     sat["diff_magnitude"] = np.linalg.norm(diff)
 
-print("\nDifference between corrected and uncorrected coordinates:")
-[print(sat["diff"], "magnitude:", sat["diff_magnitude"]) for sat in satellites]
+# print("\nDifference between corrected and uncorrected coordinates:")
+# [print(sat["diff"], "magnitude:", sat["diff_magnitude"]) for sat in satellites]
 
 
 """
@@ -127,3 +127,52 @@ def geodetic_to_cartesian(geodetic_coords):
 approx_receiver_cartesian = geodetic_to_cartesian(approx_receiver_geodetic)
 print("\nApprox receiver coordinates in Cartesian:")
 print(approx_receiver_cartesian)
+
+
+"""
+Step 4:
+"""
+
+"""
+To estimate the receiver position, we need to establish observation equation 𝑳 = 𝑨𝑿 (Δ𝐿 = 𝐴Δ𝑋).
+How we design the observation equation is given in the Appendix.
+
+4)  Design and show in the report the observation equation and estimate the receiver position in the
+    Cartesian coordinates. The satellite coordinates together with the approximate receiver position
+    are used to compute the design matrix 𝑨. See the Appendix.
+"""
+
+def A_matrix(satellites, approx_receiver_cartesian):
+    A = []
+    for sat in satellites:
+        rho_i = np.linalg.norm(sat["coords"] - approx_receiver_cartesian[:3])
+        row = [
+            -(sat["coords"][0] - approx_receiver_cartesian[0]) / rho_i,
+            -(sat["coords"][1] - approx_receiver_cartesian[1]) / rho_i,
+            -(sat["coords"][2] - approx_receiver_cartesian[2]) / rho_i,
+            -c
+        ]
+        A.append(row)
+    return np.array(A)
+
+def delta_L_vector(satellites, approx_receiver_cartesian):
+    L = []
+    for sat in satellites:
+        rho_i = np.linalg.norm(sat["coords"] - approx_receiver_cartesian)
+        L.append(sat["P"] - rho_i - c * sat["dt"] - sat["dion"] - sat["dtrop"])
+    return np.array(L).reshape(-1, 1)
+
+
+for i in range(10):
+    A = A_matrix(satellites, approx_receiver_cartesian)
+    delta_L = delta_L_vector(satellites, approx_receiver_cartesian)
+    delta_X = np.linalg.inv(A.T @ A) @ A.T @ delta_L
+    approx_receiver_cartesian = approx_receiver_cartesian + delta_X[:3].flatten()
+    if np.linalg.norm(delta_X[:3]) < 1e-6: break
+    if i == 9: 
+        print("Max iterations reached")
+        break
+    print(f"\nIteration {i+1}:", approx_receiver_cartesian)
+
+print("\nFinal receiver coordinates in Cartesian:", approx_receiver_cartesian)
+print("Receiver clock bias (in seconds):", delta_X[3][0])
