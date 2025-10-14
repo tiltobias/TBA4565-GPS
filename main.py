@@ -99,3 +99,31 @@ for sat in satellites:
 
 print("\nDifference between corrected and uncorrected coordinates:")
 [print(sat["diff"], "magnitude:", sat["diff_magnitude"]) for sat in satellites]
+
+
+"""
+Step 3:
+"""
+
+approx_receiver_geodetic = np.array([63.2, 10.2, 100]) # lat, lon, height in degrees and meters
+
+def geodetic_to_cartesian(geodetic_coords):
+    """
+    Convert geodetic coordinates (latitude, longitude, height) to ECEF Cartesian coordinates (X, Y, Z).
+    Latitude and longitude are in degrees, height is in meters.
+    Returns a numpy array [X, Y, Z] in meters.
+    """
+    phi, lam, h = np.deg2rad(geodetic_coords[0]), np.deg2rad(geodetic_coords[1]), geodetic_coords[2]
+    a = 6378137.0 # WGS-84
+    b = 6356752.3142
+
+    N = a**2 / np.sqrt(a**2 * np.cos(phi)**2 + b**2 * np.sin(phi)**2)
+    x = (N + h) * np.cos(phi) * np.cos(lam)
+    y = (N + h) * np.cos(phi) * np.sin(lam)
+    z = (b**2 / a**2 * N + h) * np.sin(phi)
+    return np.array([x, y, z])
+
+
+approx_receiver_cartesian = geodetic_to_cartesian(approx_receiver_geodetic)
+print("\nApprox receiver coordinates in Cartesian:")
+print(approx_receiver_cartesian)
