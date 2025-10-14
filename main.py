@@ -133,15 +133,6 @@ print(approx_receiver_cartesian)
 Step 4:
 """
 
-"""
-To estimate the receiver position, we need to establish observation equation 𝑳 = 𝑨𝑿 (Δ𝐿 = 𝐴Δ𝑋).
-How we design the observation equation is given in the Appendix.
-
-4)  Design and show in the report the observation equation and estimate the receiver position in the
-    Cartesian coordinates. The satellite coordinates together with the approximate receiver position
-    are used to compute the design matrix 𝑨. See the Appendix.
-"""
-
 def A_matrix(satellites, approx_receiver_cartesian):
     A = []
     for sat in satellites:
@@ -176,3 +167,16 @@ for i in range(10):
 
 print("\nFinal receiver coordinates in Cartesian:", approx_receiver_cartesian)
 print("Receiver clock bias (in seconds):", delta_X[3][0])
+
+
+"""
+Step 5:
+"""
+
+Q_x = np.linalg.inv(A.T @ A)
+
+print("\nCovariance matrix Q_x:\n", Q_x)
+
+PDOP = np.sqrt(Q_x[0,0] + Q_x[1,1] + Q_x[2,2])
+print("PDOP:", PDOP)
+
