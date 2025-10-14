@@ -34,8 +34,18 @@ def R3(x): #rotation matrix around z axis
                      [np.sin(x), np.cos(x), 0],
                      [0, 0, 1]])
 
+def satellite_coordinates(sat, T, correction=True):
 
-for sat in satellites:
+    deltaN = sat["DeltaN"] if correction else 0
+    Idot = sat["IDOT"] if correction else 0
+    OmegaDot = sat["OmegaDot"] if correction else 0
+    Cuc = sat["Cuc"] if correction else 0
+    Cus = sat["Cus"] if correction else 0
+    Crc = sat["Crc"] if correction else 0
+    Crs = sat["Crs"] if correction else 0
+    Cic = sat["Cic"] if correction else 0
+    Cis = sat["Cis"] if correction else 0
+
     # print(sat)
     t_s = T - sat["P"]/c + sat["dt"]
 
@@ -43,7 +53,7 @@ for sat in satellites:
     if t_k >  302400: t_k -= 604800
     if t_k < -302400: t_k += 604800
 
-    M_k = sat["M0"] + (GM**0.5 / sat["sqrtA"]**3 + sat["DeltaN"]) * t_k
+    M_k = sat["M0"] + (GM**0.5 / sat["sqrtA"]**3 + deltaN) * t_k
 
     E_k = M_k
     for _ in range(3):
@@ -51,17 +61,41 @@ for sat in satellites:
 
     f_k = 2 * np.arctan(np.sqrt((1 + sat["Eccentricity"]) / (1 - sat["Eccentricity"])) * np.tan(E_k / 2))
 
-    u_k = sat["omega"] + f_k + sat["Cuc"] * np.cos(2 * (sat["omega"] + f_k)) + sat["Cus"] * np.sin(2 * (sat["omega"] + f_k))
+    u_k = sat["omega"] + f_k + Cuc * np.cos(2 * (sat["omega"] + f_k)) + Cus * np.sin(2 * (sat["omega"] + f_k))
 
-    r_k = sat["sqrtA"]**2 * (1 - sat["Eccentricity"] * np.cos(E_k)) + sat["Crc"] * np.cos(2 * (sat["omega"] + f_k)) + sat["Crs"] * np.sin(2 * (sat["omega"] + f_k))
+    r_k = sat["sqrtA"]**2 * (1 - sat["Eccentricity"] * np.cos(E_k)) + Crc * np.cos(2 * (sat["omega"] + f_k)) + Crs * np.sin(2 * (sat["omega"] + f_k))
 
-    i_k = sat["Io"] + sat["IDOT"] * t_k + sat["Cic"] * np.cos(2 * (sat["omega"] + f_k)) + sat["Cis"] * np.sin(2 * (sat["omega"] + f_k))
+    i_k = sat["Io"] + Idot * t_k + Cic * np.cos(2 * (sat["omega"] + f_k)) + Cis * np.sin(2 * (sat["omega"] + f_k))
 
-    lambda_k = sat["Omega0"] + (sat["OmegaDot"] - omega_e) * t_k - omega_e * sat["Toe"]
+    lambda_k = sat["Omega0"] + (OmegaDot - omega_e) * t_k - omega_e * sat["Toe"]
 
     coords = R3(lambda_k) @ R1(i_k) @ R3(u_k) @ np.array([r_k, 0, 0]) # not negative rotation parameters because Y is flipped negative
 
+    return coords
+
+for sat in satellites:
+    coords = satellite_coordinates(sat, T, correction=True)
     sat["coords"] = coords
 
-print("Coordinates (ECEF) at transmission time:")
+print("\nCoordinates (ECEF) at transmission time:")
 [print(sat["coords"]) for sat in satellites]
+
+
+"""
+Step 2:
+"""
+
+for sat in satellites:
+    coords_uncorrected = satellite_coordinates(sat, T, correction=False)
+    sat["coords_uncorrected"] = coords_uncorrected
+
+print("\nUncorrected coordinates (ECEF) at transmission time:")
+[print(sat["coords_uncorrected"]) for sat in satellites]
+
+for sat in satellites:
+    diff = sat["coords"] - sat["coords_uncorrected"]
+    sat["diff"] = diff
+    sat["diff_magnitude"] = np.linalg.norm(diff)
+
+print("\nDifference between corrected and uncorrected coordinates:")
+[print(sat["diff"], "magnitude:", sat["diff_magnitude"]) for sat in satellites]
