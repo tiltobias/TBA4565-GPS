@@ -4,17 +4,17 @@ import pandas as pd
 import numpy as np
 warnings.filterwarnings("ignore", category=FutureWarning, module="georinex")
 
-data = gr.load("ephimerides.nav").to_dataframe()
+ephimerides = gr.load("ephimerides.nav").to_dataframe()
 obs = pd.read_csv("observations.csv")
 
 satellites = [
-    pd.concat([data.xs("G08", level="sv").iloc[0], obs[obs["sv"]=="G08"].iloc[0]]),
-    pd.concat([data.xs("G10", level="sv").iloc[0], obs[obs["sv"]=="G10"].iloc[0]]),
-    pd.concat([data.xs("G21", level="sv").iloc[0], obs[obs["sv"]=="G21"].iloc[0]]),
-    pd.concat([data.xs("G24", level="sv").iloc[0], obs[obs["sv"]=="G24"].iloc[0]]),
-    pd.concat([data.xs("G17", level="sv").iloc[1], obs[obs["sv"]=="G17"].iloc[0]]),
-    pd.concat([data.xs("G03", level="sv").iloc[1], obs[obs["sv"]=="G03"].iloc[0]]),
-    pd.concat([data.xs("G14", level="sv").iloc[0], obs[obs["sv"]=="G14"].iloc[0]]),
+    pd.concat([ephimerides.xs("G08", level="sv").iloc[0], obs[obs["sv"]=="G08"].iloc[0]]),
+    pd.concat([ephimerides.xs("G10", level="sv").iloc[0], obs[obs["sv"]=="G10"].iloc[0]]),
+    pd.concat([ephimerides.xs("G21", level="sv").iloc[0], obs[obs["sv"]=="G21"].iloc[0]]),
+    pd.concat([ephimerides.xs("G24", level="sv").iloc[0], obs[obs["sv"]=="G24"].iloc[0]]),
+    pd.concat([ephimerides.xs("G17", level="sv").iloc[1], obs[obs["sv"]=="G17"].iloc[0]]),
+    pd.concat([ephimerides.xs("G03", level="sv").iloc[1], obs[obs["sv"]=="G03"].iloc[0]]),
+    pd.concat([ephimerides.xs("G14", level="sv").iloc[0], obs[obs["sv"]=="G14"].iloc[0]]),
 ]
 
 T = 558000
