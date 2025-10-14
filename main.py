@@ -154,18 +154,19 @@ def delta_L_vector(satellites, approx_receiver_cartesian):
     return np.array(L).reshape(-1, 1)
 
 
+receiver_cartesian = approx_receiver_cartesian.copy()
 for i in range(10):
-    A = A_matrix(satellites, approx_receiver_cartesian)
-    delta_L = delta_L_vector(satellites, approx_receiver_cartesian)
+    A = A_matrix(satellites, receiver_cartesian)
+    delta_L = delta_L_vector(satellites, receiver_cartesian)
     delta_X = np.linalg.inv(A.T @ A) @ A.T @ delta_L
-    approx_receiver_cartesian = approx_receiver_cartesian + delta_X[:3].flatten()
+    receiver_cartesian = receiver_cartesian + delta_X[:3].flatten()
     if np.linalg.norm(delta_X[:3]) < 1e-6: break
     if i == 9: 
         print("Max iterations reached")
         break
-    print(f"\nIteration {i+1}:", approx_receiver_cartesian)
+    print(f"Iteration {i+1}:", receiver_cartesian)
 
-print("\nFinal receiver coordinates in Cartesian:", approx_receiver_cartesian)
+print("\nFinal receiver coordinates in Cartesian:", receiver_cartesian)
 print("Receiver clock bias (in seconds):", delta_X[3][0])
 
 
@@ -179,4 +180,37 @@ print("\nCovariance matrix Q_x:\n", Q_x)
 
 PDOP = np.sqrt(Q_x[0,0] + Q_x[1,1] + Q_x[2,2])
 print("PDOP:", PDOP)
+
+
+"""
+Step 6:
+"""
+
+def cartesian_to_geodetic(cartesian_coords):
+    """
+    Convert ECEF Cartesian coordinates (X, Y, Z) to geodetic coordinates (latitude, longitude, height).
+    X, Y, Z are in meters.
+    Returns a numpy array [latitude, longitude, height] where latitude and longitude are in degrees and height is in meters.
+    """
+    x, y, z = cartesian_coords
+    a = 6378137.0 # WGS-84
+    b = 6356752.3142
+    e2 = 1 - (b**2 / a**2)
+    lam = np.arctan2(y, x)
+    p = np.sqrt(x**2 + y**2)
+    phi_0 = np.arctan2(z, p * (1 - e2))
+    for i in range(10):
+        N_0 = a**2 / np.sqrt(a**2 * np.cos(phi_0)**2 + b**2 * np.sin(phi_0)**2)
+        h = p / np.cos(phi_0) - N_0
+        phi = np.arctan2(z, p * (1 - e2 * (N_0 / (N_0 + h))))
+        if abs(phi - phi_0) < 1e-12: break
+        if i == 9: 
+            print("Max iterations reached")
+            break
+        phi_0 = phi
+    return np.array([np.rad2deg(phi), np.rad2deg(lam), h])
+
+receiver_geodetic = cartesian_to_geodetic(receiver_cartesian)
+print("\nFinal receiver coordinates in Geodetic (lat, lon, height):")
+print(receiver_geodetic)
 
