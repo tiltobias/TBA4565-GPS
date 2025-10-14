@@ -77,8 +77,8 @@ for sat in satellites:
     coords = satellite_coordinates(sat, T, correction=True)
     sat["coords"] = coords
 
-# print("\nCoordinates (ECEF) at transmission time:")
-# [print(sat["coords"]) for sat in satellites]
+print("\nCoordinates (ECEF) at transmission time:")
+[print(sat["coords"]) for sat in satellites]
 
 
 """
@@ -89,16 +89,16 @@ for sat in satellites:
     coords_uncorrected = satellite_coordinates(sat, T, correction=False)
     sat["coords_uncorrected"] = coords_uncorrected
 
-# print("\nUncorrected coordinates (ECEF) at transmission time:")
-# [print(sat["coords_uncorrected"]) for sat in satellites]
+print("\nUncorrected coordinates (ECEF) at transmission time:")
+[print(sat["coords_uncorrected"]) for sat in satellites]
 
 for sat in satellites:
     diff = sat["coords"] - sat["coords_uncorrected"]
     sat["diff"] = diff
     sat["diff_magnitude"] = np.linalg.norm(diff)
 
-# print("\nDifference between corrected and uncorrected coordinates:")
-# [print(sat["diff"], "magnitude:", sat["diff_magnitude"]) for sat in satellites]
+print("\nDifference between corrected and uncorrected coordinates:")
+[print(sat["diff"], "magnitude:", sat["diff_magnitude"]) for sat in satellites]
 
 
 """
@@ -155,11 +155,13 @@ def delta_L_vector(satellites, approx_receiver_cartesian):
 
 
 receiver_cartesian = approx_receiver_cartesian.copy()
+receiver_clock_bias = 0
 for i in range(10):
     A = A_matrix(satellites, receiver_cartesian)
     delta_L = delta_L_vector(satellites, receiver_cartesian)
     delta_X = np.linalg.inv(A.T @ A) @ A.T @ delta_L
-    receiver_cartesian = receiver_cartesian + delta_X[:3].flatten()
+    receiver_cartesian += delta_X[:3].flatten()
+    receiver_clock_bias += delta_X[3, 0]
     if np.linalg.norm(delta_X[:3]) < 1e-6: break
     if i == 9: 
         print("Max iterations reached")
@@ -167,7 +169,6 @@ for i in range(10):
     print(f"Iteration {i+1}:", receiver_cartesian)
 
 print("\nFinal receiver coordinates in Cartesian:", receiver_cartesian)
-print("Receiver clock bias (in seconds):", delta_X[3][0])
 
 
 """
@@ -214,3 +215,9 @@ receiver_geodetic = cartesian_to_geodetic(receiver_cartesian)
 print("\nFinal receiver coordinates in Geodetic (lat, lon, height):")
 print(receiver_geodetic)
 
+
+"""
+Step 7:
+"""
+
+print("\nReceiver clock bias (in seconds):", receiver_clock_bias)
