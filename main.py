@@ -35,8 +35,8 @@ def R3(x): #rotation matrix around z axis
                      [0, 0, 1]])
 
 
-for sat in satellites[5:6]:
-    print(sat)
+for sat in satellites:
+    # print(sat)
     t_s = T - sat["P"]/c + sat["dt"]
 
     t_k = t_s - sat["Toe"]
@@ -59,8 +59,9 @@ for sat in satellites[5:6]:
 
     lambda_k = sat["Omega0"] + (sat["OmegaDot"] - omega_e) * t_k - omega_e * sat["Toe"]
 
-    coords = R3(-lambda_k) @ R1(-i_k) @ R3(u_k) @ np.array([r_k, 0, 0])
+    coords = R3(lambda_k) @ R1(i_k) @ R3(u_k) @ np.array([r_k, 0, 0]) # not negative rotation parameters because Y is flipped negative
 
-    print("Coordinates (ECEF) at transmission time:")
-    print(coords)
-    print()
+    sat["coords"] = coords
+
+print("Coordinates (ECEF) at transmission time:")
+[print(sat["coords"]) for sat in satellites]
