@@ -161,7 +161,7 @@ for i in range(10):
     delta_L = delta_L_vector(satellites, receiver_cartesian)
     delta_X = np.linalg.inv(A.T @ A) @ A.T @ delta_L
     receiver_cartesian += delta_X[:3].flatten()
-    receiver_clock_bias += delta_X[3, 0]
+    receiver_clock_bias = delta_X[3, 0]
     if np.linalg.norm(delta_X[:3]) < 1e-6: break
     if i == 9: 
         print("Max iterations reached")
