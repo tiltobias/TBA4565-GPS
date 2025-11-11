@@ -4,25 +4,20 @@ import pandas as pd
 import numpy as np
 warnings.filterwarnings("ignore", category=FutureWarning, module="georinex")
 
-ephimerides = gr.load("data_project1_absolute_code/ephimerides.nav").to_dataframe()
-obs = pd.read_csv("data_project1_absolute_code/observations.csv")
+from data_project1_absolute_code.variables import T
 
-satellites = [
-    pd.concat([ephimerides.xs("G08", level="sv").iloc[0], obs[obs["sv"]=="G08"].iloc[0]]),
-    pd.concat([ephimerides.xs("G10", level="sv").iloc[0], obs[obs["sv"]=="G10"].iloc[0]]),
-    pd.concat([ephimerides.xs("G21", level="sv").iloc[0], obs[obs["sv"]=="G21"].iloc[0]]),
-    pd.concat([ephimerides.xs("G24", level="sv").iloc[0], obs[obs["sv"]=="G24"].iloc[0]]),
-    pd.concat([ephimerides.xs("G17", level="sv").iloc[1], obs[obs["sv"]=="G17"].iloc[0]]),
-    pd.concat([ephimerides.xs("G03", level="sv").iloc[1], obs[obs["sv"]=="G03"].iloc[0]]),
-    pd.concat([ephimerides.xs("G14", level="sv").iloc[0], obs[obs["sv"]=="G14"].iloc[0]]),
-]
-
-T = 558000
+"""
+General constants
+"""
 c = 299792458
-
 GM = 3.986005e14
 omega_e = 7.2921151467e-5
 pi = 3.1415926535898
+
+
+"""
+Functions
+"""
 
 def R1(x): #rotation matrix around x axis
     return np.array([[1, 0, 0],
@@ -73,39 +68,6 @@ def satellite_coordinates(sat, T, correction=True):
 
     return coords
 
-for sat in satellites:
-    coords = satellite_coordinates(sat, T, correction=True)
-    sat["coords"] = coords
-
-print("\nCoordinates (ECEF) at transmission time:")
-[print(sat["coords"]) for sat in satellites]
-
-
-"""
-Step 2:
-"""
-
-for sat in satellites:
-    coords_uncorrected = satellite_coordinates(sat, T, correction=False)
-    sat["coords_uncorrected"] = coords_uncorrected
-
-print("\nUncorrected coordinates (ECEF) at transmission time:")
-[print(sat["coords_uncorrected"]) for sat in satellites]
-
-for sat in satellites:
-    diff = sat["coords"] - sat["coords_uncorrected"]
-    sat["diff"] = diff
-    sat["diff_magnitude"] = np.linalg.norm(diff)
-
-print("\nDifference between corrected and uncorrected coordinates:")
-[print(sat["diff"], "magnitude:", sat["diff_magnitude"]) for sat in satellites]
-
-
-"""
-Step 3:
-"""
-
-approx_receiver_geodetic = np.array([63.2, 10.2, 100]) # lat, lon, height in degrees and meters
 
 def geodetic_to_cartesian(geodetic_coords):
     """
@@ -123,15 +85,6 @@ def geodetic_to_cartesian(geodetic_coords):
     z = (b**2 / a**2 * N + h) * np.sin(phi)
     return np.array([x, y, z])
 
-
-approx_receiver_cartesian = geodetic_to_cartesian(approx_receiver_geodetic)
-print("\nApprox receiver coordinates in Cartesian:")
-print(approx_receiver_cartesian)
-
-
-"""
-Step 4:
-"""
 
 def A_matrix(satellites, approx_receiver_cartesian):
     A = []
@@ -153,39 +106,6 @@ def delta_L_vector(satellites, approx_receiver_cartesian):
         L.append(sat["P"] - rho_i - c * sat["dt"] - sat["dion"] - sat["dtrop"])
     return np.array(L).reshape(-1, 1)
 
-
-receiver_cartesian = approx_receiver_cartesian.copy()
-receiver_clock_bias = 0
-for i in range(10):
-    A = A_matrix(satellites, receiver_cartesian)
-    delta_L = delta_L_vector(satellites, receiver_cartesian)
-    delta_X = np.linalg.inv(A.T @ A) @ A.T @ delta_L
-    receiver_cartesian += delta_X[:3].flatten()
-    receiver_clock_bias = delta_X[3, 0]
-    if np.linalg.norm(delta_X[:3]) < 1e-6: break
-    if i == 9: 
-        print("Max iterations reached")
-        break
-    print(f"Iteration {i+1}:", receiver_cartesian)
-
-print("\nFinal receiver coordinates in Cartesian:", receiver_cartesian)
-
-
-"""
-Step 5:
-"""
-
-Q_x = np.linalg.inv(A.T @ A)
-
-print("\nCovariance matrix Q_x:\n", Q_x)
-
-PDOP = np.sqrt(Q_x[0,0] + Q_x[1,1] + Q_x[2,2])
-print("PDOP:", PDOP)
-
-
-"""
-Step 6:
-"""
 
 def cartesian_to_geodetic(cartesian_coords):
     """
@@ -211,13 +131,111 @@ def cartesian_to_geodetic(cartesian_coords):
         phi_0 = phi
     return np.array([np.rad2deg(phi), np.rad2deg(lam), h])
 
-receiver_geodetic = cartesian_to_geodetic(receiver_cartesian)
-print("\nFinal receiver coordinates in Geodetic (lat, lon, height):")
-print(receiver_geodetic)
-
 
 """
-Step 7:
+Steps
 """
 
-print("\nReceiver clock bias (in seconds):", receiver_clock_bias)
+def main():
+    ephimerides = gr.load("data_project1_absolute_code/ephimerides.nav").to_dataframe()
+    obs = pd.read_csv("data_project1_absolute_code/observations.csv")
+
+    satellites = [
+        pd.concat([ephimerides.xs("G08", level="sv").iloc[0], obs[obs["sv"]=="G08"].iloc[0]]),
+        pd.concat([ephimerides.xs("G10", level="sv").iloc[0], obs[obs["sv"]=="G10"].iloc[0]]),
+        pd.concat([ephimerides.xs("G21", level="sv").iloc[0], obs[obs["sv"]=="G21"].iloc[0]]),
+        pd.concat([ephimerides.xs("G24", level="sv").iloc[0], obs[obs["sv"]=="G24"].iloc[0]]),
+        pd.concat([ephimerides.xs("G17", level="sv").iloc[1], obs[obs["sv"]=="G17"].iloc[0]]),
+        pd.concat([ephimerides.xs("G03", level="sv").iloc[1], obs[obs["sv"]=="G03"].iloc[0]]),
+        pd.concat([ephimerides.xs("G14", level="sv").iloc[0], obs[obs["sv"]=="G14"].iloc[0]]),
+    ]
+
+    for sat in satellites:
+        coords = satellite_coordinates(sat, T, correction=True)
+        sat["coords"] = coords
+
+    print("\nCoordinates (ECEF) at transmission time:")
+    [print(sat["coords"]) for sat in satellites]
+
+
+    """
+    Step 2:
+    """
+
+    for sat in satellites:
+        coords_uncorrected = satellite_coordinates(sat, T, correction=False)
+        sat["coords_uncorrected"] = coords_uncorrected
+
+    print("\nUncorrected coordinates (ECEF) at transmission time:")
+    [print(sat["coords_uncorrected"]) for sat in satellites]
+
+    for sat in satellites:
+        diff = sat["coords"] - sat["coords_uncorrected"]
+        sat["diff"] = diff
+        sat["diff_magnitude"] = np.linalg.norm(diff)
+
+    print("\nDifference between corrected and uncorrected coordinates:")
+    [print(sat["diff"], "magnitude:", sat["diff_magnitude"]) for sat in satellites]
+
+
+    """
+    Step 3:
+    """
+
+    approx_receiver_geodetic = np.array([63.2, 10.2, 100]) # lat, lon, height in degrees and meters
+    
+    approx_receiver_cartesian = geodetic_to_cartesian(approx_receiver_geodetic)
+    print("\nApprox receiver coordinates in Cartesian:")
+    print(approx_receiver_cartesian)
+
+
+    """
+    Step 4:
+    """
+    
+    receiver_cartesian = approx_receiver_cartesian.copy()
+    receiver_clock_bias = 0
+    for i in range(10):
+        A = A_matrix(satellites, receiver_cartesian)
+        delta_L = delta_L_vector(satellites, receiver_cartesian)
+        delta_X = np.linalg.inv(A.T @ A) @ A.T @ delta_L
+        receiver_cartesian += delta_X[:3].flatten()
+        receiver_clock_bias = delta_X[3, 0]
+        if np.linalg.norm(delta_X[:3]) < 1e-6: break
+        if i == 9: 
+            print("Max iterations reached")
+            break
+        print(f"Iteration {i+1}:", receiver_cartesian)
+
+    print("\nFinal receiver coordinates in Cartesian:", receiver_cartesian)
+
+
+    """
+    Step 5:
+    """
+
+    Q_x = np.linalg.inv(A.T @ A)
+
+    print("\nCovariance matrix Q_x:\n", Q_x)
+
+    PDOP = np.sqrt(Q_x[0,0] + Q_x[1,1] + Q_x[2,2])
+    print("PDOP:", PDOP)
+
+
+    """
+    Step 6:
+    """
+    
+    receiver_geodetic = cartesian_to_geodetic(receiver_cartesian)
+    print("\nFinal receiver coordinates in Geodetic (lat, lon, height):")
+    print(receiver_geodetic)
+
+
+    """
+    Step 7:
+    """
+
+    print("\nReceiver clock bias (in seconds):", receiver_clock_bias)
+
+if __name__ == "__main__":
+    main()
