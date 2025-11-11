@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 warnings.filterwarnings("ignore", category=FutureWarning, module="georinex")
 
-ephimerides = gr.load("ephimerides.nav").to_dataframe()
-obs = pd.read_csv("observations.csv")
+ephimerides = gr.load("data_project1_absolute_code/ephimerides.nav").to_dataframe()
+obs = pd.read_csv("data_project1_absolute_code/observations.csv")
 
 satellites = [
     pd.concat([ephimerides.xs("G08", level="sv").iloc[0], obs[obs["sv"]=="G08"].iloc[0]]),
