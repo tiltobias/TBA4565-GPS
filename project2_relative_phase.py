@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
-from project1_absolute_code import geodetic_to_cartesian
+from project1_absolute_code import geodetic_to_cartesian, cartesian_to_geodetic
 
-from data_project2_relative_phase.variables import T1, T2, base_known_llh, rover_approx_llh
+from data_project2_relative_phase.variables import T1, T2, base_known_llh, rover_approx_llh, P_matrix
 
 """
 General constants
@@ -28,7 +28,7 @@ def A_matrix(satellites_rover, approx_rover_xyz):
             row = np.zeros(3 + len(satellites_rover[T]) -1)
             for x, X in enumerate(["X","Y","Z"]):
                 row[x] = ( -( (sat_rover[X] - approx_rover_xyz[x]) / rho_B_j ) + ( (sat_rover_i[X] - approx_rover_xyz[x]) / rho_B_i ) )
-            row[3 + j -1] = 1
+            row[3 + j -1] = wavelength_L1
             A.append(row)
     return np.array(A)
 
@@ -47,7 +47,7 @@ def delta_L_vector(satellites_base, satellites_rover, approx_base_xyz, approx_ro
 
             Phi_AB_ij = (sat_rover["L1"] - sat_rover_i["L1"] - sat_base["L1"] + sat_base_i["L1"]) * wavelength_L1
             L.append(Phi_AB_ij - rho_B_j + rho_B_i + rho_A_j - rho_A_i)
-    return np.array(L)
+    return np.array(L).reshape(-1, 1)
 
 def main():
     satellites_base  = {T1: pd.read_csv("data_project2_relative_phase/base_T1.csv"),
@@ -69,11 +69,58 @@ def main():
     """
     Step 2: Observation equation, design matrix and delta L vector. Estimate rover position with Double difference.
     """
-    print(A_matrix(satellites_rover, rover_approx_xyz))
-    print(delta_L_vector(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz))
+    # print(A_matrix(satellites_rover, rover_approx_xyz))
+    # print(delta_L_vector(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz))
+
+    rover_xyz = rover_approx_xyz.copy()
+    for i in range(10):
+        A = A_matrix(satellites_rover, rover_xyz)
+        delta_L = delta_L_vector(satellites_base, satellites_rover, base_known_xyz, rover_xyz)
+        delta_X = np.linalg.inv(A.T @ P_matrix @ A) @ A.T @ P_matrix @ delta_L
+        rover_xyz += delta_X[:3].flatten()
+        phase_ambiguities = delta_X[3:].flatten()
+        C_X = np.linalg.inv(A.T @ P_matrix @ A)
+        if np.linalg.norm(delta_X[:3]) < 1e-6: break
+        if i == 9: 
+            print("Max iterations reached")
+            break
+        print(f"Iteration {i+1}:", rover_xyz)
+
+    print("\nFinal rover coordinates in Cartesian:", rover_xyz)
+    print("Estimated phase ambiguities (in cycles):", phase_ambiguities)
+    print("Covariance matrix C_X:\n", C_X)
 
 
+    """
+    Step 3: Fixing the ambiguities and re-estimating the rover position
+    """
 
+    fixed_ambiguities = np.round(phase_ambiguities) # Round to nearest integer
+    print("\nFixed ambiguities (in cycles):", fixed_ambiguities)
+
+    # rover_xyz_fixed = rover_approx_xyz.copy()
+    # for i in range(10):
+    #     A = A_matrix(satellites_rover, rover_xyz_fixed)
+    #     delta_L = delta_L_vector(satellites_base, satellites_rover, base_known_xyz, rover_xyz_fixed)
+    #     # Modify delta_L to account for fixed ambiguities
+    #     for j in range(len(fixed_ambiguities)):
+    #         delta_L -= fixed_ambiguities[j] * wavelength_L1
+    #     delta_X = np.linalg.inv(A.T @ P_matrix @ A) @ A.T @ P_matrix @ delta_L
+    #     rover_xyz_fixed += delta_X[:3].flatten()
+    #     if np.linalg.norm(delta_X[:3]) < 1e-6: break
+    #     if i == 9: 
+    #         print("Max iterations reached")
+    #         break
+    #     print(f"Iteration {i+1} (fixed ambiguities):", rover_xyz_fixed)
+    # print("\nFinal rover coordinates with fixed ambiguities in Cartesian:", rover_xyz_fixed)
+
+
+    """
+    Step 4: Convert final rover position to Geodetic coordinates
+    """
+
+    rover_llh = cartesian_to_geodetic(rover_xyz)
+    print("\nFinal rover coordinates in Geodetic (lat, lon, height):", rover_llh)
 
 
 if __name__ == "__main__":
