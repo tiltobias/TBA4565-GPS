@@ -60,13 +60,14 @@ def estimate_position_float(satellites_base, satellites_rover, base_known_xyz, r
         delta_L = delta_L_vector(satellites_base, satellites_rover, base_known_xyz, rover_xyz)
         delta_X = np.linalg.inv(A.T @ P_matrix @ A) @ A.T @ P_matrix @ delta_L
         rover_xyz += delta_X[:3].flatten()
-        phase_ambiguities = delta_X[3:].flatten()
-        C_X = np.linalg.inv(A.T @ P_matrix @ A)
         if np.linalg.norm(delta_X[:3]) < 1e-6: break
         if i == 9: 
             print("Max iterations reached")
             break
-    return rover_xyz, phase_ambiguities, C_X
+    phase_ambiguities = delta_X[3:].flatten()
+    C_X = np.linalg.inv(A.T @ P_matrix @ A)
+    v = delta_L - A @ delta_X
+    return rover_xyz, phase_ambiguities, C_X, v
 
 def estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities):
     rover_xyz_fixed = rover_approx_xyz.copy()
@@ -77,12 +78,13 @@ def estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, r
             delta_L -= fixed_ambiguities[j] * wavelength_L1
         delta_X = np.linalg.inv(A.T @ P_matrix @ A) @ A.T @ P_matrix @ delta_L
         rover_xyz_fixed += delta_X.flatten()
-        C_X = np.linalg.inv(A.T @ P_matrix @ A)
         if np.linalg.norm(delta_X) < 1e-6: break
         if i == 9: 
             print("Max iterations reached")
             break
-    return rover_xyz_fixed, C_X
+    C_X = np.linalg.inv(A.T @ P_matrix @ A)
+    v = delta_L - A @ delta_X
+    return rover_xyz_fixed, C_X, v
 
 
 def main():
@@ -94,6 +96,7 @@ def main():
     """
     Step 1: Transform receiver to Cartesian coordinates
     """
+    print("Step 1:")
 
     base_known_xyz = geodetic_to_cartesian(base_known_llh)
     rover_approx_xyz = geodetic_to_cartesian(rover_approx_llh)
@@ -107,29 +110,82 @@ def main():
     """
     print("Step 2:")
 
-    rover_xyz, phase_ambiguities, C_X = estimate_position_float(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz)
+    rover_xyz_float, phase_ambiguities, C_X_float, v = estimate_position_float(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz)
 
-    print("Final rover coordinates in Cartesian:", rover_xyz)
+    print("Final rover coordinates in Cartesian:", rover_xyz_float)
     print("Estimated phase ambiguities (in cycles):", phase_ambiguities)
-    print("Covariance matrix C_X:", C_X[:3, :3].diagonal())
+    print("Covariance matrix C_X:", C_X_float[:3, :3].diagonal())
+    print("Residuals vector v:", v.flatten())
+    ssr = v.T @ P_matrix @ v
+    print("Sum of squared residuals (SSR):", ssr)
 
 
     """
     Step 3: Fixing the ambiguities and re-estimating the rover position
     """
-    print("Step 3:")
+    print("Step 3a:")
     
-    fixed_ambiguities = phase_ambiguities.copy() # Real ambiguities
-    print("Fixed ambiguities (in cycles):", fixed_ambiguities)
-    rover_xyz_fixed, C_X = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities)
-    print("Final rover coordinates with fixed ambiguities in Cartesian:", rover_xyz_fixed)
-    print("Covariance matrix C_X:", C_X.diagonal())
+    fixed_ambiguities_real = phase_ambiguities.copy() # Real ambiguities
+    print("Fixed ambiguities (in cycles) (real)   :", fixed_ambiguities_real)
+    rover_xyz_fixed_real, C_X, v = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities_real)
+    print("Rover:", rover_xyz_fixed_real, "C_X:", C_X.diagonal())
 
-    fixed_ambiguities = np.round(phase_ambiguities) # Round to nearest integer
-    print("Fixed ambiguities (in cycles):", fixed_ambiguities)
-    rover_xyz_fixed, C_X = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities)
-    print("Final rover coordinates with fixed ambiguities in Cartesian:", rover_xyz_fixed)
-    print("Covariance matrix C_X:", C_X.diagonal())
+
+    print("Step 3b:")
+
+    fixed_ambiguities_rounded = np.round(phase_ambiguities) # Round to nearest integer
+    print("Fixed ambiguities (in cycles) (rounded):", fixed_ambiguities_rounded)
+    rover_xyz_fixed_rounded, C_X, v = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities_rounded)
+    print("Rover:", rover_xyz_fixed_rounded, "C_X:", C_X.diagonal())
+
+
+    print("Step 3c:")
+
+    ambiguities_std = np.sqrt(np.diag(C_X_float)[3:])
+    print("Ambiguity standard deviations (in cycles):", ambiguities_std)
+    ambiguities_min = phase_ambiguities - 3 * ambiguities_std
+    ambiguities_max = phase_ambiguities + 3 * ambiguities_std
+    fixed_ambiguities_min = np.floor(ambiguities_min) # TODO flipped ceil and floor?, maybe round or more stds
+    fixed_ambiguities_max = np.ceil(ambiguities_max)
+
+    def product_ranges(ranges):
+        if not ranges:
+            yield ()
+            return
+        first, *rest = ranges
+        for value in first:
+            for prod in product_ranges(rest):
+                yield (value, ) + prod
+
+    ranges = [
+        range(int(min_i), int(max_i) + 1)
+        for min_i, max_i in zip(fixed_ambiguities_min, fixed_ambiguities_max)
+    ]
+    print("Searching over ranges for fixed ambiguities:")
+    for r in ranges:
+        print(r, end=" ")
+    print()
+
+    ssr_best = float('inf')
+    combination_best = None
+    rover_xyz_best, C_X_best, v_best = None, None, None
+    ssr_2best = float('inf')
+    combination_2best = None
+    rover_xyz_2best, C_X_2best, v_2best = None, None, None
+    for fixed_ambiguities_combo in product_ranges(ranges):
+        rover_xyz, C_X, v = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities_rounded)
+        ssr = v.T @ P_matrix @ v
+        if ssr < ssr_best:
+            ssr_2best = ssr_best
+            combination_2best = combination_best
+            rover_xyz_2best, C_X_2best, v_2best = rover_xyz_best, C_X_best, v_best
+            ssr_best = ssr
+            combination_best = fixed_ambiguities_combo
+            rover_xyz_best, C_X_best, v_best = rover_xyz, C_X, v
+        elif ssr < ssr_2best:
+            ssr_2best = ssr
+            combination_2best = fixed_ambiguities_combo
+            rover_xyz_2best, C_X_2best, v_2best = rover_xyz, C_X, v
 
 
     """
@@ -137,11 +193,17 @@ def main():
     """
     print("Step 4:")
 
-    rover_llh = cartesian_to_geodetic(rover_xyz)
-    print("Final rover coordinates in Geodetic (lat, lon, height):", rover_llh)
+    rover_llh_float = cartesian_to_geodetic(rover_xyz_float)
+    print("Rover coordinates float solution            (lat, lon, height):", rover_llh_float)
 
-    rover_llh_fixed = cartesian_to_geodetic(rover_xyz_fixed)
-    print("Final rover coordinates in Geodetic (lat, lon, height):", rover_llh_fixed)
+    rover_llh_fixed_real = cartesian_to_geodetic(rover_xyz_fixed_real)
+    print("Rover coordinates real fixed ambiguities    (lat, lon, height):", rover_llh_fixed_real)
+
+    rover_llh_fixed_rounded = cartesian_to_geodetic(rover_xyz_fixed_rounded)
+    print("Rover coordinates rounded fixed ambiguities (lat, lon, height):", rover_llh_fixed_rounded)
+
+    rover_llh_best = cartesian_to_geodetic(rover_xyz_best)
+    print("Best rover coordinates in Geodetic          (lat, lon, height):", rover_llh_best)
 
 
 if __name__ == "__main__":
