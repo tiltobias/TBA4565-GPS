@@ -75,7 +75,8 @@ def estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, r
         A = A_matrix(satellites_rover, rover_xyz_fixed, fixed_ambiguities=True)
         delta_L = delta_L_vector(satellites_base, satellites_rover, base_known_xyz, rover_xyz_fixed)
         for j in range(len(fixed_ambiguities)): # Subtract the fixed ambiguities contribution
-            delta_L -= fixed_ambiguities[j] * wavelength_L1
+            delta_L[j] -= fixed_ambiguities[j] * wavelength_L1
+            delta_L[j + len(fixed_ambiguities)] -= fixed_ambiguities[j] * wavelength_L1
         delta_X = np.linalg.inv(A.T @ P_matrix @ A) @ A.T @ P_matrix @ delta_L
         rover_xyz_fixed += delta_X.flatten()
         if np.linalg.norm(delta_X) < 1e-6: break
@@ -173,8 +174,8 @@ def main():
     combination_2best = None
     rover_xyz_2best, C_X_2best, v_2best = None, None, None
     for fixed_ambiguities_combo in product_ranges(ranges):
-        rover_xyz, C_X, v = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities_rounded)
-        ssr = v.T @ P_matrix @ v
+        rover_xyz, C_X, v = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities_combo)
+        ssr = (v.T @ P_matrix @ v).item()
         if ssr < ssr_best:
             ssr_2best = ssr_best
             combination_2best = combination_best
@@ -204,6 +205,14 @@ def main():
 
     rover_llh_best = cartesian_to_geodetic(rover_xyz_best)
     print("Best rover coordinates in Geodetic          (lat, lon, height):", rover_llh_best)
+    print("Best fixed ambiguities (in cycles)          :", combination_best)
+
+    rover_llh_2best = cartesian_to_geodetic(rover_xyz_2best)
+    print("2nd Best rover coordinates in Geodetic      (lat, lon, height):", rover_llh_2best)
+    print("2nd Best fixed ambiguities (in cycles)      :", combination_2best)
+
+    print("ssr ratio 2nd best / best:", ssr_2best / ssr_best)
+    print("Best solution likely correct if ratio > 3:", ssr_2best / ssr_best > 3)
 
 
 if __name__ == "__main__":
