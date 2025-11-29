@@ -103,7 +103,6 @@ def main():
     rover_approx_xyz = geodetic_to_cartesian(rover_approx_llh)
     print("Base position (XYZ):", base_known_xyz)
     print("Rover approximate position (XYZ):", rover_approx_xyz)
-    # TODO: rename to llh and xyz in project1
 
 
     """
@@ -115,7 +114,7 @@ def main():
 
     print("Final rover coordinates in Cartesian:", rover_xyz_float)
     print("Estimated phase ambiguities (in cycles):", phase_ambiguities)
-    print("Covariance matrix C_X:", C_X_float[:3, :3].diagonal())
+    print("Covariance matrix C_X:", C_X_float)
     print("Residuals vector v:", v.flatten())
     ssr = v.T @ P_matrix @ v
     print("Sum of squared residuals (SSR):", ssr)
@@ -129,7 +128,7 @@ def main():
     fixed_ambiguities_real = phase_ambiguities.copy() # Real ambiguities
     print("Fixed ambiguities (in cycles) (real)   :", fixed_ambiguities_real)
     rover_xyz_fixed_real, C_X, v = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities_real)
-    print("Rover:", rover_xyz_fixed_real, "C_X:", C_X.diagonal())
+    print("Rover:", rover_xyz_fixed_real, "C_X:", C_X)
 
 
     print("Step 3b:")
@@ -137,8 +136,7 @@ def main():
     fixed_ambiguities_rounded = np.round(phase_ambiguities) # Round to nearest integer
     print("Fixed ambiguities (in cycles) (rounded):", fixed_ambiguities_rounded)
     rover_xyz_fixed_rounded, C_X, v = estimate_position_fixed(satellites_base, satellites_rover, base_known_xyz, rover_approx_xyz, fixed_ambiguities_rounded)
-    print("Rover:", rover_xyz_fixed_rounded, "C_X:", C_X.diagonal())
-
+    print("Rover:", rover_xyz_fixed_rounded, "C_X:", C_X)
 
     print("Step 3c:")
 
@@ -146,7 +144,7 @@ def main():
     print("Ambiguity standard deviations (in cycles):", ambiguities_std)
     ambiguities_min = phase_ambiguities - 3 * ambiguities_std
     ambiguities_max = phase_ambiguities + 3 * ambiguities_std
-    fixed_ambiguities_min = np.floor(ambiguities_min) # TODO flipped ceil and floor?, maybe round or more stds
+    fixed_ambiguities_min = np.floor(ambiguities_min)
     fixed_ambiguities_max = np.ceil(ambiguities_max)
 
     def product_ranges(ranges):
